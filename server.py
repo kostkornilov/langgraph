@@ -301,7 +301,7 @@ async def api_chat(req: Request):
         else:
             # fallback to string conversion
             try:
-                text_out = str(response)
+                text_out = str(response.content)
             except Exception:
                 text_out = ""
 
