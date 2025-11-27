@@ -12,8 +12,7 @@ services:
       - ./books:/app/books:ro
       # Note: do not mount the whole repo over /app (it can mask /app/data). If you need live code mounts, add them explicitly here.
     env_file:
-      - ./.en      .\myenv\Scripts\Activate.ps1
-      python .\scripts\build_faiss.pyv
+      - ./.env
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request,sys; r=urllib.request.urlopen('http://localhost:8000/ready'); sys.exit(0 if r.getcode()==200 else 1)\""]
