@@ -144,7 +144,9 @@ def main() -> None:
             print("Aborting ingestion. Install PyPDF2 in your environment and retry.")
             sys.exit(2)
 
-    for i, chunk in enumerate(build_chunks_from_pages(pages, pdf.name)):
+        # Build chunks for this specific PDF, ensuring metadata (source, pages)
+        # is not accidentally reused across different files.
+        for i, chunk in enumerate(build_chunks_from_pages(pages, pdf.name)):
             doc = {
                 "id": str(uuid.uuid4()),
                 "source": pdf.name,
