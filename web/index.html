@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LangGraph RAG Chat</title>
+    <style>
+      :root{
+        --bg1: #f8f6f2;
+        --card: #fffefc;
+        --accent: #6b46c1;
+        --accent-2: #ff6b6b;
+        --muted: #6b7280;
+      }
+      html,body{height:100%;}
+      body {
+        font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+        max-width: 1000px;
+        margin: 2rem auto;
+        background: radial-gradient(circle at 10% 10%, rgba(107,70,193,0.06), transparent 15%),
+                    linear-gradient(180deg, var(--bg1) 0%, #f1efe9 100%);
+        color: #0f172a;
+        padding: 2rem;
+      }
+      header{display:flex;align-items:center;gap:1rem}
+      h1{margin:0;color:var(--accent)}
+      .ui-card{
+        background: repeating-linear-gradient(135deg, rgba(255,255,255,0.6) 0px, rgba(255,255,255,0.6) 10px, rgba(0,0,0,0.01) 10px, rgba(0,0,0,0.01) 20px), var(--card);
+        border-radius:12px; box-shadow: 0 6px 18px rgba(15,23,42,0.06); padding:1rem; margin-top:1rem;
+      }
+      #controls textarea{width:100%; border-radius:8px; padding:.75rem; border:1px solid #e6e6e6}
+      .btn{background:linear-gradient(90deg,var(--accent),#8b5cf6); color:white; border:none;padding:.5rem .75rem;border-radius:8px;cursor:pointer}
+      .btn.ghost{background:transparent;color:var(--accent);border:1px solid rgba(107,70,193,0.12)}
+      #results { margin-top: 1rem; }
+      .chunk { border-left: 4px solid rgba(107,70,193,0.12); padding: .75rem; margin-bottom: .75rem; background: linear-gradient(180deg, rgba(255,255,255,0.8), rgba(250,250,252,0.8)); border-radius:8px }
+      .meta { color: var(--muted); font-size: .9rem; margin-bottom:.5rem }
+      .chunk .excerpt{white-space:pre-wrap; color:#0b1220}
+      .citation-link{display:inline-block;margin-top:.5rem;color:var(--accent-2);text-decoration:none;font-weight:600}
+      .chat-answer{background:linear-gradient(90deg,#fff,#f7fbff);padding:1rem;border-radius:10px;border:1px solid rgba(99,102,241,0.06)}
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>LangGraph RAG Chat</h1>
+      <div style="margin-left:auto;color:var(--muted)">Dostoevsky corpus</div>
+    </header>
+    <p style="color:var(--muted)">Задайте вопрос по корпусу Достоевского. Система выполнит поиск по FAISS и вернёт фрагменты текста с кликабельными ссылками на исходный PDF.</p>
+
+    <div class="ui-card" id="controls">
+      <textarea id="query" rows="3" placeholder="Спросите про Раскольникова..."></textarea>
+      <div style="margin-top:.5rem;display:flex;gap:.5rem">
+        <button id="searchBtn" class="btn">Search</button>
+        <button id="chatBtn" class="btn ghost">Chat (LLM)</button>
+      </div>
+    </div>
+
+    <div id="results"></div>
+
+    <script>
+      async function post(path, body) {
+        const res = await fetch(path, {
+          method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+        });
+        return res.json();
+      }
+
+      document.getElementById('searchBtn').addEventListener('click', async () => {
+        const q = document.getElementById('query').value;
+        const r = await post('/api/search', {query: q, top_k: 5});
+        const out = document.getElementById('results');
+          out.innerHTML = '<h3>Search results</h3>';
+          for (const item of r.results) {
+            const div = document.createElement('div'); div.className='chunk';
+            const pagesStart = (item.page_index_start!==null && item.page_index_start!==undefined) ? (item.page_index_start+1) : '?';
+            const pagesEnd = (item.page_index_end!==null && item.page_index_end!==undefined) ? (item.page_index_end+1) : '?';
+            const link = item.link ? `<a class="citation-link" href="${item.link}" target="_blank">Open source (page ${pagesStart})</a>` : '';
+            div.innerHTML = `<div class="meta">${item.source} [pages ${pagesStart}-${pagesEnd}] chunk:${item.chunk_index}</div><div class="excerpt">${highlight(escapeHtml(item.text), q)}</div>${link}`;
+            out.appendChild(div);
+          }
+      });
+
+      document.getElementById('chatBtn').addEventListener('click', async () => {
+        const q = document.getElementById('query').value;
+        const r = await post('/api/chat', {query: q, top_k: 5});
+        const out = document.getElementById('results');
+        out.innerHTML = '<h3>Chat answer</h3>';
+        if (r.answer) {
+          const ans = document.createElement('div'); ans.className='chat-answer'; ans.innerText = r.answer; out.appendChild(ans);
+        } else if (r.prompt) {
+          const div = document.createElement('div'); div.className='chunk'; div.innerText = 'LLM not configured on server. Retrieved context:' + '\n\n' + r.prompt; out.appendChild(div);
+        } else {
+          out.appendChild(document.createElement('pre')).innerText = JSON.stringify(r, null, 2);
+        }
+
+        // show enriched citations with excerpt and links
+        if (r.citations && r.citations.length>0) {
+          const sec = document.createElement('div'); sec.innerHTML = '<h4>Sources</h4>';
+          for (const c of r.citations) {
+            const cdiv = document.createElement('div'); cdiv.className='chunk';
+            const pages = c.page_index_start ? (parseInt(c.page_index_start)+1) : '?';
+            const link = c.link ? `<a class="citation-link" href="${c.link}" target="_blank">Open source (page ${pages})</a>` : '';
+            const meta = `<div class="meta">${c.source || 'unknown'} chunk:${c.chunk_index || '?'}</div>`;
+            cdiv.innerHTML = meta + `<div class="excerpt">${highlight(escapeHtml(c.text || ''), q)}</div>` + link;
+            sec.appendChild(cdiv);
+          }
+          out.appendChild(sec);
+        }
+      });
+
+      // simple escaping to avoid injecting raw html
+      function escapeHtml(s){ if(!s) return ''; return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;'); }
+        function escapeRegExp(string) {
+          return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        function highlight(text, query){
+          if(!query) return text;
+          try{
+            const q = query.trim();
+            if(!q) return text;
+            const re = new RegExp(escapeRegExp(q), 'gi');
+            return text.replace(re, (m) => `<mark style="background:yellow;color:inherit">${m}</mark>`);
+          }catch(e){ return text; }
+        }
+
+    </script>
+  </body>
+</html>

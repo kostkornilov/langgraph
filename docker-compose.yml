@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  web:
+    build: .
+    image: langgraph-rag:local
+    container_name: langgraph_rag
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./books:/app/books:ro
+      # Note: do not mount the whole repo over /app (it can mask /app/data). If you need live code mounts, add them explicitly here.
+    env_file:
+      - ./.en      .\myenv\Scripts\Activate.ps1
+      python .\scripts\build_faiss.pyv
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; r=urllib.request.urlopen('http://localhost:8000/ready'); sys.exit(0 if r.getcode()==200 else 1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3

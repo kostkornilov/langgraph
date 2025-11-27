@@ -1,0 +1,10 @@
+langchain
+langchain-google-genai
+faiss-cpu
+sentence-transformers
+PyPDF2
+numpy
+fastapi
+uvicorn[standard]
+jinja2
+python-dotenv

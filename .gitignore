@@ -1,0 +1,9 @@
+books/*
+__pycache__/*
+.github/*
+.vscode/*
+data/*
+.env
+myenv/
+scripts/__pycache__/*
+rag/__pycache__/*
